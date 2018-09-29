@@ -11,8 +11,8 @@ namespace plt = matplotlibcpp;
 using CppAD::AD;
 
 // TODO: Set N and dt
-size_t N = 10;
-double T = 1.0;
+size_t N = 25;
+double T = 1.25;
 double dt = T / N;
 
 // This value assumes the model presented in the classroom is used.
@@ -62,6 +62,7 @@ class FG_eval {
     // any anything you think may be beneficial.
 
     for (int t = 0; t < N; ++t) {
+      // The part of the cost based on the reference state.
       auto cte = vars[cte_start + t];
       fg[0] += CppAD::pow(cte, 2);
 
@@ -71,10 +72,24 @@ class FG_eval {
       auto v = vars[v_start + t];
       fg[0] += CppAD::pow(v - ref_v, 2);
 
+      // Minimize the use of actuators.
+      if (t + 1 < N) {
+        auto delta = vars[delta_start + t];
+        fg[0] += CppAD::pow(delta, 2);
+
+        auto a = vars[a_start + t];
+        fg[0] += CppAD::pow(a, 2);
+      }
+
+      // Minimize the value gap between sequential actuations.
       if (t + 2 < N) {
         auto delta = vars[delta_start + t];
         auto delta_next = vars[delta_start + t + 1];
         fg[0] += CppAD::pow(delta - delta_next, 2);
+
+        auto a = vars[a_start + t];
+        auto a_next = vars[a_start + t + 1];
+        fg[0] += CppAD::pow(a - a_next, 2);
       }
     }
 
@@ -113,6 +128,9 @@ class FG_eval {
       auto cte1 = vars[cte_start + t + 1];
       auto epsi1 = vars[epsi_start + t + 1];
 
+      auto f0 = coeffs[0] + coeffs[1] * x0;
+      auto psi_dest0 = CppAD::atan(coeffs[1]);
+
       // Here's `x` to get you started.
       // The idea here is to constraint this value to be 0.
       //
@@ -121,14 +139,12 @@ class FG_eval {
       // these to the solver.
 
       // TODO: Setup the rest of the model constraints
-      auto y_dest = -1.0;
-      auto psi_dest = 0.0;
       fg[1 + x_start + t + 1] = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
       fg[1 + y_start + t + 1] = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
       fg[1 + psi_start + t + 1] = psi1 - (psi0 + v0/Lf * delta0 * dt);
       fg[1 + v_start + t + 1] = v1 - (v0 + a0 * dt);
-      fg[1 + cte_start + t + 1] = cte1 - (y_dest - y0 + v0 * CppAD::sin(epsi0) * dt);
-      fg[1 + epsi_start + t + 1] = epsi1 - (psi0 - psi_dest + v0/Lf * delta0 * dt);
+      fg[1 + cte_start + t + 1] = cte1 - (f0 - y0 + v0 * CppAD::sin(epsi0) * dt);
+      fg[1 + epsi_start + t + 1] = epsi1 - (psi0 - psi_dest0 + v0/Lf * delta0 * dt);
     }
   }
 };
